@@ -10,7 +10,7 @@ dotenv.config();
 const app = express();
 const port = 3000;
 
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // Helper to convert 16-bit PCM 24000Hz mono buffer to WAV
 function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
@@ -299,6 +299,105 @@ app.get('/api/tts/status', (req: Request, res: Response) => {
       { id: 'Zephyr', name: 'Зефир (Zephyr)', desc: 'Мягкий, проникновенный, доверительный' },
     ],
   });
+});
+
+// Endpoint: Speech-to-Text (STT) Audio Transcription with Gemini API
+app.post('/api/stt/transcribe', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { audioBase64, mimeType = 'audio/wav', fileName, sceneContext } = req.body;
+
+    if (!audioBase64 || typeof audioBase64 !== 'string') {
+      res.status(400).json({ error: 'audioBase64 is required' });
+      return;
+    }
+
+    // Clean base64 data prefix if present (e.g. "data:audio/wav;base64,....")
+    const cleanBase64 = audioBase64.includes(';base64,')
+      ? audioBase64.split(';base64,')[1]
+      : audioBase64;
+
+    // Detect / normalize audio mime type
+    let resolvedMime = mimeType || 'audio/wav';
+    if (resolvedMime === 'audio/x-m4a' || resolvedMime === 'audio/m4a') {
+      resolvedMime = 'audio/mp4';
+    } else if (resolvedMime === 'audio/mp3') {
+      resolvedMime = 'audio/mpeg';
+    }
+
+    const ai = getGenAIClient();
+    const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash-lite'];
+    let transcribedText = '';
+    let lastError: any = null;
+
+    const promptText = `You are a high-precision Speech-to-Text transcription model.
+Task: Transcribe the spoken speech in the provided audio file into Russian text.
+${sceneContext ? `Context: This speech is for a 70-second cinematic film (${sceneContext}).` : ''}
+
+Strict Rules:
+1. Return ONLY the transcribed Russian words.
+2. Do NOT add quotation marks, explanations, notes, metadata, or timestamps.
+3. Keep correct punctuation (periods, commas, dashes, question marks).
+4. If there is no clear speech (silence, ambient noise or music only), respond with empty text.`;
+
+    for (const model of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: resolvedMime,
+                    data: cleanBase64,
+                  },
+                },
+                {
+                  text: promptText,
+                },
+              ],
+            },
+          ],
+          config: {
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        });
+
+        if (response.text !== undefined && response.text !== null) {
+          transcribedText = response.text.trim();
+          // Remove wrapping quotes if Gemini returned "Текст"
+          if (
+            (transcribedText.startsWith('«') && transcribedText.endsWith('»')) ||
+            (transcribedText.startsWith('"') && transcribedText.endsWith('"')) ||
+            (transcribedText.startsWith("'") && transcribedText.endsWith("'"))
+          ) {
+            transcribedText = transcribedText.slice(1, -1).trim();
+          }
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`STT model ${model} failed, trying next:`, err?.message || err);
+      }
+    }
+
+    if (!transcribedText && lastError) {
+      throw lastError;
+    }
+
+    res.json({
+      success: true,
+      text: transcribedText,
+      fileName,
+    });
+  } catch (err: any) {
+    console.error('Error during STT transcription:', err);
+    res.status(500).json({
+      error: err?.message || 'Failed to transcribe audio',
+      details: err?.toString(),
+    });
+  }
 });
 
 async function startServer() {

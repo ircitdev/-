@@ -1,6 +1,10 @@
 {
-  "name": "Озвучка ролика 70 секунд | Студия женского голоса",
+  "name": "Uspeshnyy | Студия озвучки",
   "description": "Профессиональная озвучка и таймлайн-микшер для 70-секундного ролика с красивым эмоциональным женским голосом, точной расстановкой по сценам и экспортом мастер-дорожки.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

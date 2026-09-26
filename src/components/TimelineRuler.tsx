@@ -69,29 +69,29 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
     switch (cat) {
       case 'childhood':
         return isActive
-          ? 'bg-amber-500 text-amber-950 border-amber-300 ring-2 ring-amber-400'
-          : 'bg-amber-950/80 hover:bg-amber-900/90 text-amber-200 border-amber-800/80';
+          ? 'bg-[#33a4d4] text-[#04202b] font-bold border-white ring-2 ring-[#33a4d4] shadow-[0_0_12px_rgba(51,164,212,0.6)]'
+          : 'bg-amber-950/70 hover:bg-amber-900/90 text-amber-200 border-amber-800/60';
       case 'motherhood':
         return isActive
-          ? 'bg-rose-500 text-rose-950 border-rose-300 ring-2 ring-rose-400'
-          : 'bg-rose-950/80 hover:bg-rose-900/90 text-rose-200 border-rose-800/80';
+          ? 'bg-[#33a4d4] text-[#04202b] font-bold border-white ring-2 ring-[#33a4d4] shadow-[0_0_12px_rgba(51,164,212,0.6)]'
+          : 'bg-cyan-950/70 hover:bg-cyan-900/90 text-cyan-200 border-cyan-800/60';
       case 'sport':
         return isActive
-          ? 'bg-cyan-500 text-cyan-950 border-cyan-300 ring-2 ring-cyan-400'
-          : 'bg-cyan-950/80 hover:bg-cyan-900/90 text-cyan-200 border-cyan-800/80';
+          ? 'bg-[#33a4d4] text-[#04202b] font-bold border-white ring-2 ring-[#33a4d4] shadow-[0_0_12px_rgba(51,164,212,0.6)]'
+          : 'bg-blue-950/70 hover:bg-blue-900/90 text-blue-200 border-blue-800/60';
       case 'recovery':
         return isActive
-          ? 'bg-slate-400 text-slate-950 border-white ring-2 ring-white'
+          ? 'bg-[#33a4d4] text-[#04202b] font-bold border-white ring-2 ring-[#33a4d4] shadow-[0_0_12px_rgba(51,164,212,0.6)]'
           : 'bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border-slate-700';
       case 'triumph':
         return isActive
-          ? 'bg-amber-400 text-amber-950 border-yellow-200 ring-2 ring-yellow-300'
-          : 'bg-amber-900/80 hover:bg-amber-800/90 text-amber-200 border-amber-700';
+          ? 'bg-[#33a4d4] text-[#04202b] font-bold border-white ring-2 ring-[#33a4d4] shadow-[0_0_12px_rgba(51,164,212,0.6)]'
+          : 'bg-amber-900/70 hover:bg-amber-800/90 text-amber-200 border-amber-700';
       case 'present':
       default:
         return isActive
-          ? 'bg-fuchsia-500 text-fuchsia-950 border-fuchsia-300 ring-2 ring-fuchsia-400'
-          : 'bg-fuchsia-950/80 hover:bg-fuchsia-900/90 text-fuchsia-200 border-fuchsia-800/80';
+          ? 'bg-[#33a4d4] text-[#04202b] font-bold border-white ring-2 ring-[#33a4d4] shadow-[0_0_12px_rgba(51,164,212,0.6)]'
+          : 'bg-sky-950/70 hover:bg-sky-900/90 text-sky-200 border-sky-800/60';
     }
   };
 
@@ -99,18 +99,19 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
   const timeTicks = [0, 10, 20, 30, 40, 50, 60, 70];
 
   return (
-    <div className="bg-zinc-900/90 rounded-2xl p-4 border border-zinc-800 shadow-xl select-none">
+    <div className="rounded-2xl p-4 border border-[#33a4d4]/25 bg-gradient-to-b from-[#0e2640]/75 to-[#040e1a]/90 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] select-none">
       {/* Header Info */}
       <div className="flex items-center justify-between mb-3 text-xs">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-zinc-200 uppercase tracking-wider text-[11px]">
+          <span className="font-bold text-[#eaf3ff] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#33a4d4] shadow-[0_0_8px_#33a4d4]" />
             Таймлайн ролика (0–70 сек)
           </span>
-          <span className="text-zinc-500">•</span>
-          <span className="text-zinc-400">Нажмите на любой отрезок для мгновенного перехода</span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-[#7b8ea6]">Нажмите на любой отрезок для мгновенного перехода</span>
         </div>
-        <div className="font-mono text-zinc-300 bg-zinc-950 px-2.5 py-1 rounded-lg border border-zinc-800">
-          <span className="text-rose-400 font-bold">{formatTimeDisplay(currentTime)}</span> / 01:10.0
+        <div className="font-mono text-[#b6c6da] bg-[#02060d]/80 px-2.5 py-1 rounded-lg border border-[#33a4d4]/20">
+          <span className="text-[#33a4d4] font-bold">{formatTimeDisplay(currentTime)}</span> / 01:10.0
         </div>
       </div>
 
@@ -120,10 +121,10 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        className="relative h-28 bg-zinc-950 rounded-xl overflow-hidden cursor-pointer border border-zinc-800/90 group"
+        className="relative h-28 bg-[#02060d] rounded-xl overflow-hidden cursor-pointer border border-[#33a4d4]/20 group"
       >
         {/* Time Tick Marks & Labels */}
-        <div className="absolute top-0 inset-x-0 h-6 border-b border-zinc-800/60 flex items-center justify-between px-2 text-[10px] font-mono text-zinc-500 pointer-events-none">
+        <div className="absolute top-0 inset-x-0 h-6 border-b border-[#33a4d4]/15 flex items-center justify-between px-2 text-[10px] font-mono text-[#7b8ea6] pointer-events-none">
           {timeTicks.map((tick) => (
             <span key={tick} style={{ left: `${(tick / duration) * 100}%` }} className="relative -translate-x-1/2">
               {tick}с
@@ -136,7 +137,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
           <div
             key={tick}
             style={{ left: `${(tick / duration) * 100}%` }}
-            className="absolute top-6 bottom-0 w-px bg-zinc-800/40 pointer-events-none z-0"
+            className="absolute top-6 bottom-0 w-px bg-white/[0.05] pointer-events-none z-0"
           />
         ))}
 
@@ -161,8 +162,8 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
                 <div
                   className={`px-1 py-[1px] rounded text-[8px] font-mono font-bold leading-none shadow-sm transition-colors ${
                     isActive
-                      ? 'bg-rose-500 text-white ring-1 ring-white/60 shadow-[0_0_8px_rgba(244,63,94,0.7)]'
-                      : 'bg-zinc-800/90 text-zinc-400 border border-zinc-700/80 hover:text-zinc-200'
+                      ? 'bg-[#33a4d4] text-[#04202b] ring-1 ring-white/60 shadow-[0_0_8px_rgba(51,164,212,0.8)]'
+                      : 'bg-[#030a14]/90 text-[#7b8ea6] border border-[#33a4d4]/20 hover:text-[#b6c6da]'
                   }`}
                   title={`Сцена #${seg.id}: ${seg.startTime}–${seg.endTime}с`}
                 >
@@ -171,7 +172,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
                 {/* Micro pointer chevron */}
                 <div
                   className={`w-0 h-0 border-x-[3px] border-x-transparent border-t-[3px] ${
-                    isActive ? 'border-t-rose-400' : 'border-t-zinc-600'
+                    isActive ? 'border-t-[#33a4d4]' : 'border-t-zinc-600'
                   }`}
                 />
               </div>
@@ -180,15 +181,15 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
               <div
                 className={`w-px h-full transition-all duration-300 ${
                   isActive
-                    ? 'w-[2px] bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.7)] opacity-100'
-                    : 'bg-zinc-700/60 border-l border-dashed border-zinc-600/40 opacity-70'
+                    ? 'w-[2px] bg-[#33a4d4] shadow-[0_0_8px_rgba(51,164,212,0.8)] opacity-100'
+                    : 'bg-white/[0.08] border-l border-dashed border-white/[0.1] opacity-70'
                 }`}
               />
 
               {/* Bottom tick dot */}
               <div
                 className={`absolute bottom-0 -translate-x-1/2 w-1 h-1 rounded-full ${
-                  isActive ? 'bg-rose-400' : 'bg-zinc-600'
+                  isActive ? 'bg-[#33a4d4]' : 'bg-zinc-600'
                 }`}
               />
             </div>
@@ -196,23 +197,23 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
         })}
 
         {/* Phase Bands / Background Narrative Track */}
-        <div className="absolute top-6 inset-x-0 h-4 flex opacity-40 text-[9px] font-medium text-zinc-400 pointer-events-none">
-          <div style={{ width: `${(8 / 70) * 100}%` }} className="bg-amber-900/30 border-r border-zinc-800 flex items-center px-1 truncate">
+        <div className="absolute top-6 inset-x-0 h-4 flex opacity-50 text-[9px] font-medium text-[#b6c6da] pointer-events-none">
+          <div style={{ width: `${(8 / 70) * 100}%` }} className="bg-amber-950/40 border-r border-[#33a4d4]/15 flex items-center px-1 truncate">
             Детство
           </div>
-          <div style={{ width: `${(14 / 70) * 100}%` }} className="bg-rose-900/30 border-r border-zinc-800 flex items-center px-1 truncate">
+          <div style={{ width: `${(14 / 70) * 100}%` }} className="bg-sky-950/40 border-r border-[#33a4d4]/15 flex items-center px-1 truncate">
             Материнство
           </div>
-          <div style={{ width: `${(10 / 70) * 100}%` }} className="bg-cyan-900/30 border-r border-zinc-800 flex items-center px-1 truncate">
+          <div style={{ width: `${(10 / 70) * 100}%` }} className="bg-cyan-950/40 border-r border-[#33a4d4]/15 flex items-center px-1 truncate">
             Лёд & Спорт
           </div>
-          <div style={{ width: `${(9 / 70) * 100}%` }} className="bg-slate-800/40 border-r border-zinc-800 flex items-center px-1 truncate">
+          <div style={{ width: `${(9 / 70) * 100}%` }} className="bg-slate-900/50 border-r border-[#33a4d4]/15 flex items-center px-1 truncate">
             Воля
           </div>
-          <div style={{ width: `${(16 / 70) * 100}%` }} className="bg-amber-700/30 border-r border-zinc-800 flex items-center px-1 truncate">
+          <div style={{ width: `${(16 / 70) * 100}%` }} className="bg-amber-900/40 border-r border-[#33a4d4]/15 flex items-center px-1 truncate">
             Триумф & Подиум
           </div>
-          <div style={{ width: `${(13 / 70) * 100}%` }} className="bg-fuchsia-900/30 flex items-center px-1 truncate">
+          <div style={{ width: `${(13 / 70) * 100}%` }} className="bg-[#143454]/40 flex items-center px-1 truncate">
             Мне 50
           </div>
         </div>
@@ -250,20 +251,20 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
         </div>
 
         {/* Sound FX Track Cues */}
-        <div className="absolute bottom-1 inset-x-0 h-4 flex items-center px-1 text-[9px] text-zinc-500 pointer-events-none">
-          <span style={{ left: `${(37 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-slate-800/80 text-white text-[8px]">
+        <div className="absolute bottom-1 inset-x-0 h-4 flex items-center px-1 text-[9px] text-[#7b8ea6] pointer-events-none">
+          <span style={{ left: `${(37 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-slate-900/90 text-white text-[8px] border border-white/10">
             ⚡ Костыли
           </span>
-          <span style={{ left: `${(41 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-amber-900/80 text-amber-200 text-[8px]">
+          <span style={{ left: `${(41 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-[#0e3a5c] text-[#5fc1e8] text-[8px] border border-[#33a4d4]/30">
             👑 Корона
           </span>
-          <span style={{ left: `${(46 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-blue-900/80 text-blue-200 text-[8px]">
+          <span style={{ left: `${(46 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-[#0e3a5c] text-[#5fc1e8] text-[8px] border border-[#33a4d4]/30">
             📸 Вспышки
           </span>
-          <span style={{ left: `${(51 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-purple-900/80 text-purple-200 text-[8px]">
+          <span style={{ left: `${(51 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-[#0e3a5c] text-[#5fc1e8] text-[8px] border border-[#33a4d4]/30">
             ✨ Хедлайнер
           </span>
-          <span style={{ left: `${(63 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-rose-900/80 text-rose-200 text-[8px]">
+          <span style={{ left: `${(63 / 70) * 100}%` }} className="absolute -translate-x-1/2 px-1 rounded bg-[#0e3a5c] text-[#5fc1e8] text-[8px] border border-[#33a4d4]/30">
             🔥 Финал
           </span>
         </div>
@@ -274,19 +275,19 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
             style={{ left: `${hoverPercent}%` }}
             className="absolute top-0 bottom-0 w-px bg-white/40 pointer-events-none z-20"
           >
-            <span className="absolute -top-1 -translate-x-1/2 -translate-y-full bg-black/90 text-white font-mono text-[10px] px-1.5 py-0.5 rounded border border-white/20">
+            <span className="absolute -top-1 -translate-x-1/2 -translate-y-full bg-[#02060d] text-[#eaf3ff] font-mono text-[10px] px-1.5 py-0.5 rounded border border-[#33a4d4]/40 shadow-lg">
               {formatTimeDisplay(hoverTime!)}
             </span>
           </div>
         )}
 
-        {/* Master Active Playhead */}
+        {/* Master Active Playhead (Uspeshnyy Cyan Glow) */}
         <div
           style={{ left: `${progressPercent}%` }}
-          className="absolute top-0 bottom-0 w-0.5 bg-rose-400 z-30 pointer-events-none shadow-[0_0_12px_rgba(244,63,94,0.8)]"
+          className="absolute top-0 bottom-0 w-0.5 bg-[#33a4d4] z-30 pointer-events-none shadow-[0_0_12px_#33a4d4]"
         >
           {/* Playhead Pin */}
-          <div className="absolute top-0 -translate-x-1/2 w-3.5 h-3.5 bg-rose-500 rounded-full border-2 border-white shadow-md" />
+          <div className="absolute top-0 -translate-x-1/2 w-3.5 h-3.5 bg-[#33a4d4] rounded-full border-2 border-white shadow-[0_0_10px_#33a4d4]" />
         </div>
       </div>
     </div>

@@ -7,6 +7,9 @@ import { TimelineRuler } from './components/TimelineRuler';
 import { AudioConsole } from './components/AudioConsole';
 import { SegmentCard } from './components/SegmentCard';
 import { ExportModal } from './components/ExportModal';
+import { FloatingMiniPlayer } from './components/FloatingMiniPlayer';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { SceneJumpBar } from './components/SceneJumpBar';
 import {
   audioBufferToWav,
   createCinematicBackingBuffer,
@@ -15,7 +18,19 @@ import {
   normalizeAudioVolume,
 } from './utils/audioEngine';
 import { fitAudioToDuration } from './utils/timeStretch';
-import { Sparkles, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
+import { generateVideoPromptWithGemini } from './utils/videoPromptService';
+import { transcribeAudioFile } from './utils/sttService';
+import {
+  Sparkles,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+  Search,
+  Filter,
+  X,
+  Command,
+  SlidersHorizontal,
+} from 'lucide-react';
 
 export default function App() {
   const [segments, setSegments] = useState<VoiceSegment[]>(INITIAL_SEGMENTS);
@@ -24,10 +39,17 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isGeneratingAll, setIsGeneratingAll] = useState<boolean>(false);
   const [isSnappingAll, setIsSnappingAll] = useState<boolean>(false);
+  const [isGeneratingAllVideoPrompts, setIsGeneratingAllVideoPrompts] = useState<boolean>(false);
   const [playingClipId, setPlayingClipId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unvoiced' | 'ready' | 'prompted'>('all');
+  const [autoScroll, setAutoScroll] = useState<boolean>(true);
+  const [showFloatingBar, setShowFloatingBar] = useState<boolean>(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [isVideoMuted, setIsVideoMuted] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<AudioSettings>({
@@ -191,6 +213,28 @@ export default function App() {
     [currentTime, handleSeek]
   );
 
+  // Jump to previous scene
+  const handlePrevSegment = useCallback(() => {
+    const currentIdx = segments.findIndex(
+      (s) => currentTime >= s.startTime && currentTime < s.endTime
+    );
+    if (currentIdx > 0) {
+      handleSeek(segments[currentIdx - 1].startTime);
+    } else {
+      handleSeek(0);
+    }
+  }, [currentTime, handleSeek, segments]);
+
+  // Jump to next scene
+  const handleNextSegment = useCallback(() => {
+    const currentIdx = segments.findIndex(
+      (s) => currentTime >= s.startTime && currentTime < s.endTime
+    );
+    if (currentIdx >= 0 && currentIdx < segments.length - 1) {
+      handleSeek(segments[currentIdx + 1].startTime);
+    }
+  }, [currentTime, handleSeek, segments]);
+
   // Master Clock Update Loop
   useEffect(() => {
     if (!isPlaying) return;
@@ -298,6 +342,15 @@ export default function App() {
     stopBgMusic,
   ]);
 
+  // Track window scroll to display floating mini controller
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowFloatingBar(window.scrollY > 420);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // Generate Single Segment Voice with Gemini TTS
   const generateSegmentAudio = async (id: number) => {
     const target = segments.find((s) => s.id === id);
@@ -398,6 +451,114 @@ export default function App() {
     showToast('Все 14 сцен успешно озвучены!');
   };
 
+  // Generate All Video Prompts with Gemini AI (1-Click)
+  const generateAllVideoPrompts = async () => {
+    if (isGeneratingAllVideoPrompts) return;
+    setIsGeneratingAllVideoPrompts(true);
+    showToast('Запущена генерация видеопромптов для всех 14 сцен через Gemini AI...');
+
+    let count = 0;
+    for (const seg of segments) {
+      try {
+        const promptDetails = await generateVideoPromptWithGemini(seg);
+        setSegments((prev) =>
+          prev.map((s) => (s.id === seg.id ? { ...s, videoPrompt: promptDetails } : s))
+        );
+        count++;
+      } catch (err) {
+        console.warn(`Failed video prompt for scene #${seg.id}:`, err);
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    setIsGeneratingAllVideoPrompts(false);
+    showToast(`Готово! Сгенерированы видеопромпты для ${count} сцен.`);
+  };
+
+  // Toggle Mute for uploaded video
+  const toggleVideoMute = useCallback(() => {
+    setIsVideoMuted((prev) => {
+      const next = !prev;
+      if (videoRef.current) {
+        videoRef.current.muted = next;
+      }
+      showToast(next ? 'Звук видео заглушён (Mute)' : 'Звук видео включён (Unmute)');
+      return next;
+    });
+  }, []);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        handleSkip(e.shiftKey ? -1 : -5);
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        handleSkip(e.shiftKey ? 1 : 5);
+      } else if (e.key === '[' || e.code === 'BracketLeft') {
+        e.preventDefault();
+        handlePrevSegment();
+      } else if (e.key === ']' || e.code === 'BracketRight') {
+        e.preventDefault();
+        handleNextSegment();
+      } else if (e.code === 'Home') {
+        e.preventDefault();
+        handleSeek(0);
+      } else if (e.code === 'End') {
+        e.preventDefault();
+        handleSeek(duration);
+      } else if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
+        e.preventDefault();
+        setSettings((prev) => ({
+          ...prev,
+          voiceVolume: prev.voiceVolume > 0 ? 0 : 0.95,
+        }));
+      } else if (e.key === 'v' || e.key === 'V' || e.key === 'м' || e.key === 'М') {
+        e.preventDefault();
+        toggleVideoMute();
+      } else if (e.key === '?' || (e.shiftKey && e.code === 'Slash')) {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+      } else if (e.key === 'a' || e.key === 'A' || e.key === 'ф' || e.key === 'Ф') {
+        e.preventDefault();
+        generateAllSegments();
+      } else if (e.key === 'p' || e.key === 'P' || e.key === 'з' || e.key === 'З') {
+        e.preventDefault();
+        generateAllVideoPrompts();
+      } else if (e.key === 'e' || e.key === 'У' || e.key === 'у' || e.key === 'E') {
+        e.preventDefault();
+        setIsExportModalOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    duration,
+    generateAllSegments,
+    generateAllVideoPrompts,
+    handleNextSegment,
+    handlePrevSegment,
+    handleSeek,
+    handleSkip,
+    togglePlay,
+    toggleVideoMute,
+  ]);
+
   // Play Single Audio Clip
   const playSingleClip = (segment: VoiceSegment) => {
     if (playingClipId === segment.id) {
@@ -488,6 +649,50 @@ export default function App() {
 
     setIsSnappingAll(false);
     showToast(`Темп синхронизирован в ${updatedCount} сценах!`);
+  };
+
+  // Handle uploading custom audio & automatically running Speech-to-Text
+  const handleAudioUploadSTT = async (segmentId: number, file: File) => {
+    const target = segments.find((s) => s.id === segmentId);
+    if (!target) return;
+
+    setSegments((prev) =>
+      prev.map((s) => (s.id === segmentId ? { ...s, status: 'generating', error: undefined } : s))
+    );
+    showToast(`Распознавание речи из «${file.name}» (сцена #${segmentId})...`);
+
+    try {
+      const result = await transcribeAudioFile(file, `Сцена #${segmentId}: ${target.sceneTitle}`);
+      const recognizedText = result.text.trim() || target.text;
+
+      setSegments((prev) =>
+        prev.map((s) =>
+          s.id === segmentId
+            ? {
+                ...s,
+                text: recognizedText,
+                audioUrl: result.audioUrl,
+                audioDuration: result.duration,
+                status: 'ready',
+              }
+            : s
+        )
+      );
+
+      if (result.text) {
+        showToast(`Текст сцены #${segmentId} распознан: «${result.text}»`);
+      } else {
+        showToast(`Аудиофайл загружен для сцены #${segmentId} (${result.duration.toFixed(1)}с)`);
+      }
+    } catch (err: any) {
+      console.error('STT upload error:', err);
+      setSegments((prev) =>
+        prev.map((s) =>
+          s.id === segmentId ? { ...s, status: 'error', error: err?.message || 'Ошибка распознавания' } : s
+        )
+      );
+      showToast(`Ошибка распознавания речи: ${err?.message || 'Попробуйте другой аудиофайл'}`);
+    }
   };
 
   // Update text for a segment
@@ -607,15 +812,32 @@ export default function App() {
   };
 
   // Filtered segments
-  const filteredSegments =
-    selectedCategory === 'all'
-      ? segments
-      : segments.filter((s) => s.category === selectedCategory);
+  const filteredSegments = segments.filter((s) => {
+    // 1. Category filter
+    if (selectedCategory !== 'all' && s.category !== selectedCategory) {
+      return false;
+    }
+    // 2. Status filter
+    if (statusFilter === 'unvoiced' && s.status === 'ready') return false;
+    if (statusFilter === 'ready' && s.status !== 'ready') return false;
+    if (statusFilter === 'prompted' && !s.videoPrompt) return false;
+    // 3. Search query filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const inText = s.text.toLowerCase().includes(q);
+      const inTitle = s.sceneTitle.toLowerCase().includes(q);
+      const inVisual = s.sceneVisual.toLowerCase().includes(q);
+      const inEmotion = s.emotionKey.toLowerCase().includes(q);
+      return inText || inTitle || inVisual || inEmotion;
+    }
+    return true;
+  });
 
   const readyCount = segments.filter((s) => s.status === 'ready').length;
+  const promptsCount = segments.filter((s) => Boolean(s.videoPrompt)).length;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-rose-500/30 selection:text-rose-200">
+    <div className="min-h-screen bg-[#030a14] text-[#b6c6da] flex flex-col font-['Onest',system-ui,sans-serif] selection:bg-[#33a4d4]/30 selection:text-white brand-ambient-glow">
       {/* Top Header */}
       <Header
         segments={segments}
@@ -627,48 +849,54 @@ export default function App() {
         readyCount={readyCount}
         onSnapAllTempos={handleSnapAllTempos}
         isSnappingAll={isSnappingAll}
+        onGenerateAllVideoPrompts={generateAllVideoPrompts}
+        isGeneratingAllVideoPrompts={isGeneratingAllVideoPrompts}
+        videoPromptsCount={promptsCount}
+        onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
       />
 
       {/* Main Studio Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-6">
         {/* Toast Notification */}
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-zinc-900/95 text-white border border-rose-500/40 shadow-2xl backdrop-blur-md animate-bounce text-xs sm:text-sm">
-            <Sparkles className="w-4 h-4 text-rose-400" />
+          <div className="fixed bottom-16 sm:bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-[#030a14]/95 text-[#eaf3ff] border border-[#33a4d4]/50 shadow-[0_0_24px_rgba(51,164,212,0.3)] backdrop-blur-xl animate-bounce text-xs sm:text-sm">
+            <Sparkles className="w-4 h-4 text-[#33a4d4]" />
             <span>{toastMessage}</span>
           </div>
         )}
 
-        {/* Top Control Grid: Video Visualizer + Audio Console */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* Left: Synchronized Storyboard Video Visualizer (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col">
-            <VideoVisualizer
-              currentTime={currentTime}
-              duration={duration}
-              isPlaying={isPlaying}
-              activeSegment={activeSegment}
-              onSeek={handleSeek}
-              uploadedVideoUrl={uploadedVideoUrl}
-              onVideoUpload={handleVideoUpload}
-              videoRef={videoRef}
-            />
-          </div>
+        {/* Cinematic Video Visualizer */}
+        <div className="w-full">
+          <VideoVisualizer
+            currentTime={currentTime}
+            duration={duration}
+            isPlaying={isPlaying}
+            activeSegment={activeSegment}
+            onSeek={handleSeek}
+            uploadedVideoUrl={uploadedVideoUrl}
+            onVideoUpload={handleVideoUpload}
+            videoRef={videoRef}
+            isVideoMuted={isVideoMuted}
+            onToggleVideoMute={toggleVideoMute}
+          />
+        </div>
 
-          {/* Right: Master Audio Console & Mixers (5 cols) */}
-          <div className="lg:col-span-5 flex flex-col justify-between">
-            <AudioConsole
-              isPlaying={isPlaying}
-              onTogglePlay={togglePlay}
-              onReset={handleReset}
-              onSkip={handleSkip}
-              currentTime={currentTime}
-              duration={duration}
-              onSeek={handleSeek}
-              settings={settings}
-              onUpdateSettings={(newSettings) => setSettings((s) => ({ ...s, ...newSettings }))}
-            />
-          </div>
+        {/* Master Sound Engineering & Transport Audio Console */}
+        <div className="w-full">
+          <AudioConsole
+            isPlaying={isPlaying}
+            onTogglePlay={togglePlay}
+            onReset={handleReset}
+            onSkip={handleSkip}
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={handleSeek}
+            settings={settings}
+            onUpdateSettings={(newSettings) => setSettings((s) => ({ ...s, ...newSettings }))}
+            uploadedVideoUrl={uploadedVideoUrl}
+            isVideoMuted={isVideoMuted}
+            onToggleVideoMute={toggleVideoMute}
+          />
         </div>
 
         {/* Interactive Master 70-Second Multi-Track Timeline */}
@@ -682,67 +910,249 @@ export default function App() {
           />
         </div>
 
+        {/* Visual Scene Quick Navigator Jump Bar */}
+        <SceneJumpBar
+          segments={segments}
+          activeSegmentId={activeSegment?.id || null}
+          onSelectScene={(seg) => {
+            handleSeek(seg.startTime);
+            const el = document.getElementById(`scene-card-${seg.id}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }}
+        />
+
         {/* Segment Manager: Header & Filter Bar */}
-        <div className="space-y-4 pt-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+        <div className="space-y-4 pt-2">
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#33a4d4]/15 pb-3">
             <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Layers className="w-5 h-5 text-rose-400" />
-                Сценарный план и реплики (14 сцен)
+              <h2 className="text-lg font-bold text-[#eaf3ff] flex items-center gap-2">
+                <Layers className="w-5 h-5 text-[#33a4d4]" />
+                Сценарный план и реплики ({filteredSegments.length} из 14)
               </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Каждая сцена идеально синхронизирована по хронометражу и интонации
+              <p className="text-xs text-[#7b8ea6] mt-0.5">
+                Синхронный хронометраж, режиссерские промпты и гибкая настройка реплик
               </p>
             </div>
 
-            {/* Category Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              {[
-                { id: 'all', label: 'Все 14 сцен' },
-                { id: 'childhood', label: 'Детство (0–8с)' },
-                { id: 'motherhood', label: 'Материнство (8–22с)' },
-                { id: 'sport', label: 'Спорт & Танец (22–32с)' },
-                { id: 'recovery', label: 'Преодоление (32–41с)' },
-                { id: 'triumph', label: 'Триумф (41–57с)' },
-                { id: 'present', label: 'Мне 50 (57–70с)' },
-              ].map((cat) => (
+            {/* Quick Helper Toolbar */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setAutoScroll((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                  autoScroll
+                    ? 'bg-[#33a4d4]/20 text-[#5fc1e8] border border-[#33a4d4]/40 shadow-sm'
+                    : 'bg-white/[0.04] text-[#7b8ea6] hover:text-[#b6c6da] border border-white/[0.08]'
+                }`}
+                title="Автоматически скроллить страницу к карточке текущей говорящей сцены"
+              >
+                <span>Авто-скролл:</span>
+                <span className="font-bold">{autoScroll ? 'Вкл' : 'Выкл'}</span>
+              </button>
+
+              <button
+                onClick={() => setIsShortcutsOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/[0.04] hover:bg-[#33a4d4]/15 text-[#b6c6da] hover:text-[#5fc1e8] border border-[#33a4d4]/25 transition-all cursor-pointer"
+                title="Горячие клавиши (нажмите ?)"
+              >
+                <Command className="w-3.5 h-3.5 text-[#33a4d4]" />
+                <span className="hidden sm:inline">Клавиши (?)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Status Filter Strip */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#02060d]/70 p-3 rounded-2xl border border-[#33a4d4]/15">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-[#7b8ea6] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по тексту реплики, кадру, настроению..."
+                className="w-full pl-9 pr-8 py-1.5 bg-[#030a14] border border-[#33a4d4]/25 rounded-xl text-xs text-[#eaf3ff] placeholder-[#7b8ea6] focus:outline-none focus:ring-1 focus:ring-[#33a4d4]"
+              />
+              {searchQuery && (
                 <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
-                    selectedCategory === cat.id
-                      ? 'bg-zinc-800 text-rose-400 border border-rose-500/40 shadow-sm'
-                      : 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7b8ea6] hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[11px] text-[#7b8ea6] mr-1 hidden lg:inline">Статус:</span>
+              {[
+                { id: 'all' as const, label: 'Все (14)' },
+                { id: 'unvoiced' as const, label: `Ожидают (${14 - readyCount})` },
+                { id: 'ready' as const, label: `Озвучены (${readyCount})` },
+                { id: 'prompted' as const, label: `С AI-промптом (${promptsCount})` },
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  onClick={() => setStatusFilter(st.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                    statusFilter === st.id
+                      ? 'bg-[#33a4d4] text-[#04202b] font-bold shadow-[0_0_10px_rgba(51,164,212,0.4)]'
+                      : 'bg-white/[0.04] text-[#7b8ea6] hover:text-[#b6c6da] border border-white/[0.08]'
                   }`}
                 >
-                  {cat.label}
+                  {st.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 14 Cue Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredSegments.map((segment) => (
-              <SegmentCard
-                key={segment.id}
-                segment={segment}
-                isActive={activeSegment?.id === segment.id}
-                onSeek={handleSeek}
-                onGenerateSingle={generateSegmentAudio}
-                onPlaySingleClip={playSingleClip}
-                isPlayingClip={playingClipId === segment.id}
-                onUpdateText={handleUpdateText}
-                onDownloadClip={downloadSingleClip}
-                onUpdateSegmentAudio={handleUpdateSegmentAudio}
-                onUpdateVideoPrompt={handleUpdateVideoPrompt}
-                masterCurrentTime={currentTime}
-                isMasterPlaying={isPlaying}
-              />
+          {/* Category Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {[
+              { id: 'all', label: 'Все сюжетные блоки' },
+              { id: 'childhood', label: 'Детство (0–8с)' },
+              { id: 'motherhood', label: 'Материнство (8–22с)' },
+              { id: 'sport', label: 'Спорт & Танец (22–32с)' },
+              { id: 'recovery', label: 'Преодоление (32–41с)' },
+              { id: 'triumph', label: 'Триумф (41–57с)' },
+              { id: 'present', label: 'Мне 50 (57–70с)' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3 py-1.5 rounded-full font-medium transition-all cursor-pointer ${
+                  selectedCategory === cat.id
+                    ? 'bg-[#33a4d4] text-[#04202b] font-bold shadow-[0_0_14px_rgba(51,164,212,0.4)]'
+                    : 'bg-white/[0.04] hover:bg-[#33a4d4]/10 text-[#b6c6da] hover:text-[#5fc1e8] border border-[#33a4d4]/20'
+                }`}
+              >
+                {cat.label}
+              </button>
             ))}
           </div>
+
+          {/* 14 Cue Cards Grid */}
+          {filteredSegments.length === 0 ? (
+            <div className="p-8 text-center bg-[#02060d]/60 rounded-2xl border border-white/[0.06] text-xs text-[#7b8ea6] space-y-2">
+              <p>По вашему фильтру или поисковому запросу ничего не найдено.</p>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('all');
+                  setStatusFilter('all');
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-[#33a4d4] text-[#04202b] font-bold text-xs"
+              >
+                Сбросить фильтры
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredSegments.map((segment) => (
+                <SegmentCard
+                  key={segment.id}
+                  segment={segment}
+                  isActive={activeSegment?.id === segment.id}
+                  onSeek={handleSeek}
+                  onGenerateSingle={generateSegmentAudio}
+                  onPlaySingleClip={playSingleClip}
+                  isPlayingClip={playingClipId === segment.id}
+                  onUpdateText={handleUpdateText}
+                  onDownloadClip={downloadSingleClip}
+                  onUpdateSegmentAudio={handleUpdateSegmentAudio}
+                  onUpdateVideoPrompt={handleUpdateVideoPrompt}
+                  masterCurrentTime={currentTime}
+                  isMasterPlaying={isPlaying}
+                  originalText={INITIAL_SEGMENTS.find((orig) => orig.id === segment.id)?.text}
+                  onPrevScene={() => {
+                    const prevSeg = segments[Math.max(0, segment.id - 2)];
+                    if (prevSeg) handleSeek(prevSeg.startTime);
+                  }}
+                  onNextScene={() => {
+                    const nextSeg = segments[Math.min(segments.length - 1, segment.id)];
+                    if (nextSeg) handleSeek(nextSeg.startTime);
+                  }}
+                  autoScroll={autoScroll}
+                  onUploadAudioSTT={handleAudioUploadSTT}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </main>
+
+      {/* Floating Sticky Mini-Player on scroll */}
+      <FloatingMiniPlayer
+        isVisible={showFloatingBar}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        onSkip={handleSkip}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        activeSegment={activeSegment}
+        onPrevSegment={handlePrevSegment}
+        onNextSegment={handleNextSegment}
+        autoScroll={autoScroll}
+        onToggleAutoScroll={() => setAutoScroll((prev) => !prev)}
+        onScrollToTop={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        voiceVolume={settings.voiceVolume}
+        onUpdateVolume={(vol) => setSettings((s) => ({ ...s, voiceVolume: vol }))}
+        uploadedVideoUrl={uploadedVideoUrl}
+        isVideoMuted={isVideoMuted}
+        onToggleVideoMute={toggleVideoMute}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* Brand Style Standard Footer: Alexander Uspeshnyy */}
+      <footer className="mt-12 border-t border-[#33a4d4]/15 bg-[#02060d]/80 backdrop-blur-md py-6 px-4 md:px-8 mb-16 sm:mb-0">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#7b8ea6]">
+          <div className="flex items-center gap-3">
+            <a
+              href="https://uspeshnyy.ru"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 group"
+            >
+              <img
+                src="https://storage.googleapis.com/uspeshnyy-projects/uspeshnyy.ru/pages/common/logo.svg"
+                alt="Успешный"
+                className="w-6 h-7 object-contain drop-shadow-[0_0_10px_rgba(51,164,212,0.6)] group-hover:scale-105 transition-transform"
+              />
+              <span className="font-bold text-[#eaf3ff] group-hover:text-[#5fc1e8] transition-colors">
+                Успешный
+              </span>
+            </a>
+            <span className="text-zinc-600">•</span>
+            <span>Архитектор AI-маркетинговых систем</span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <a
+              href="https://t.me/uspeshnyy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1 rounded-full border border-[#33a4d4]/30 bg-[#33a4d4]/10 text-[#33a4d4] hover:bg-[#33a4d4] hover:text-[#04202b] transition-all font-semibold"
+            >
+              Telegram @uspeshnyy
+            </a>
+            <a
+              href="https://uspeshnyy.ru"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[#33a4d4] transition-colors"
+            >
+              uspeshnyy.ru
+            </a>
+          </div>
+        </div>
+      </footer>
 
       {/* Export / Script Modal */}
       <ExportModal

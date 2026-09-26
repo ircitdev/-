@@ -8,6 +8,8 @@ import {
   Award,
   Trophy,
   Compass,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { VoiceSegment } from '../types';
 import { formatTimeDisplay } from '../utils/audioEngine';
@@ -21,6 +23,8 @@ interface VideoVisualizerProps {
   uploadedVideoUrl: string | null;
   onVideoUpload: (file: File) => void;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  isVideoMuted?: boolean;
+  onToggleVideoMute?: () => void;
 }
 
 // Visual ambiance presets for the 14 scenes
@@ -256,6 +260,8 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
   uploadedVideoUrl,
   onVideoUpload,
   videoRef,
+  isVideoMuted = false,
+  onToggleVideoMute,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -264,6 +270,13 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
   const [currentSeg, setCurrentSeg] = useState<VoiceSegment | null>(activeSegment);
   const [prevSeg, setPrevSeg] = useState<VoiceSegment | null>(null);
   const [isCrossFading, setIsCrossFading] = useState<boolean>(false);
+
+  // Ensure video element muted state is strictly synchronized
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = Boolean(isVideoMuted);
+    }
+  }, [isVideoMuted, videoRef, uploadedVideoUrl]);
 
   // Sync HTML5 video currentTime with studio currentTime
   useEffect(() => {
@@ -322,7 +335,7 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
 
   return (
     <div
-      className={`relative w-full aspect-[16/9] md:aspect-[16/9.2] bg-zinc-950 rounded-2xl overflow-hidden border shadow-2xl transition-colors duration-700 ${
+      className={`relative w-full aspect-[16/9] max-h-[480px] md:max-h-[540px] bg-zinc-950 rounded-2xl overflow-hidden border shadow-2xl transition-colors duration-700 ${
         currentTheme.border
       } ${isDragging ? 'ring-2 ring-rose-500 scale-[1.005]' : ''}`}
       onDragOver={(e) => {
@@ -338,7 +351,7 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
           ref={videoRef}
           src={uploadedVideoUrl}
           playsInline
-          muted={false}
+          muted={isVideoMuted}
           className="w-full h-full object-contain bg-black"
         />
       ) : (
@@ -362,23 +375,54 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
         </div>
       )}
 
+      {/* Floating Video Audio Control on the video surface */}
+      {uploadedVideoUrl && onToggleVideoMute && (
+        <div className="absolute bottom-4 left-4 z-30 flex items-center gap-2">
+          <button
+            onClick={onToggleVideoMute}
+            className={`group inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border shadow-xl transition-all active:scale-95 cursor-pointer ${
+              isVideoMuted
+                ? 'bg-[#030a14]/90 hover:bg-rose-950/80 text-rose-300 border-rose-500/50 ring-1 ring-rose-500/30'
+                : 'bg-[#030a14]/90 hover:bg-[#0e2640]/90 text-[#5fc1e8] border-[#33a4d4]/50 ring-1 ring-[#33a4d4]/30'
+            }`}
+            title={isVideoMuted ? 'Включить исходный звук видео (клавиша V)' : 'Заглушить исходный звук видео (Mute, клавиша V)'}
+          >
+            {isVideoMuted ? (
+              <>
+                <div className="w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 group-hover:scale-110 transition-transform">
+                  <VolumeX className="w-3.5 h-3.5" />
+                </div>
+                <span>Звук видео: Mute (заглушён)</span>
+              </>
+            ) : (
+              <>
+                <div className="w-5 h-5 rounded-full bg-[#33a4d4]/20 flex items-center justify-center text-[#33a4d4] group-hover:scale-110 transition-transform">
+                  <Volume2 className="w-3.5 h-3.5" />
+                </div>
+                <span>Звук видео: Включён</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Subtle 'Recording' / Timeline Processing Pulse Overlay */}
       {isPlaying && (
         <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
           {/* Perimeter subtle pulsing studio glow */}
-          <div className="absolute inset-0 ring-1 ring-rose-500/40 shadow-[inset_0_0_28px_rgba(244,63,94,0.18)] animate-pulse" />
+          <div className="absolute inset-0 ring-1 ring-[#33a4d4]/40 shadow-[inset_0_0_28px_rgba(51,164,212,0.2)] animate-pulse" />
 
           {/* Camera Viewfinder Reticle Corner Brackets */}
-          <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-rose-500/70" />
-          <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-rose-500/70" />
-          <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-rose-500/70" />
-          <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-rose-500/70" />
+          <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-[#33a4d4]/80" />
+          <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-[#33a4d4]/80" />
+          <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-[#33a4d4]/80" />
+          <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-[#33a4d4]/80" />
 
           {/* Scanning Timeline Bar at the bottom */}
-          <div className="absolute bottom-0 inset-x-0 h-1 bg-black/40 backdrop-blur-sm z-25">
+          <div className="absolute bottom-0 inset-x-0 h-1 bg-black/50 backdrop-blur-sm z-25">
             <div
               style={{ width: `${(currentTime / duration) * 100}%` }}
-              className="h-full bg-gradient-to-r from-rose-600 via-rose-500 to-amber-400 shadow-[0_0_10px_rgba(244,63,94,0.9)] transition-all duration-75 relative"
+              className="h-full bg-gradient-to-r from-[#143454] via-[#33a4d4] to-[#5fc1e8] shadow-[0_0_12px_#33a4d4] transition-all duration-75 relative"
             >
               <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_6px_#fff]" />
             </div>
@@ -390,33 +434,59 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
       <div className="absolute top-4 md:top-6 right-4 md:right-6 z-30 flex flex-wrap items-center gap-2">
         {/* Recording / Live Processing Status Pill */}
         {isPlaying && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/85 backdrop-blur-md border border-rose-500/60 text-rose-200 text-xs font-mono shadow-lg shadow-rose-950/50">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#030a14]/90 backdrop-blur-md border border-[#33a4d4]/50 text-[#eaf3ff] text-xs font-mono shadow-lg shadow-[#030a14]/60">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#33a4d4] opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#33a4d4] shadow-[0_0_6px_#33a4d4]" />
             </span>
-            <span className="font-bold tracking-wider text-[11px] text-white">REC</span>
-            <span className="text-rose-400/60 font-light">•</span>
-            <span className="text-[10px] text-rose-200 font-sans font-medium hidden sm:inline">
+            <span className="font-bold tracking-wider text-[11px] text-[#5fc1e8]">SYNC</span>
+            <span className="text-[#33a4d4]/60 font-light">•</span>
+            <span className="text-[10px] text-[#b6c6da] font-sans font-medium hidden sm:inline">
               {activeSegment ? `Сцена #${activeSegment.id} (${activeSegment.startTime}–${activeSegment.endTime}с)` : 'Эфир'}
             </span>
           </div>
         )}
 
         {/* Master Timecode Pill */}
-        <span className="font-mono text-xs md:text-sm px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md border border-white/10 text-zinc-300 shadow-md">
-          <span className="text-rose-400 font-bold">{formatTimeDisplay(currentTime)}</span> /{' '}
+        <span className="font-mono text-xs md:text-sm px-3 py-1 rounded-full bg-[#02060d]/85 backdrop-blur-md border border-[#33a4d4]/25 text-[#b6c6da] shadow-md">
+          <span className="text-[#33a4d4] font-bold drop-shadow-[0_0_8px_rgba(51,164,212,0.6)]">{formatTimeDisplay(currentTime)}</span> /{' '}
           {formatTimeDisplay(duration)}
         </span>
+
+        {/* Mute Video Audio Button (HUD) */}
+        {uploadedVideoUrl && onToggleVideoMute && (
+          <button
+            onClick={onToggleVideoMute}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all shadow-lg active:scale-95 cursor-pointer backdrop-blur-md border ${
+              isVideoMuted
+                ? 'bg-rose-500/25 hover:bg-rose-500/35 text-rose-300 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                : 'bg-[#33a4d4]/20 hover:bg-[#33a4d4]/30 text-[#5fc1e8] border-[#33a4d4]/50 shadow-[#030a14]/60'
+            }`}
+            title={isVideoMuted ? 'Включить исходный звук видео (Unmute, клавиша V)' : 'Заглушить исходный звук видео (Mute, клавиша V)'}
+          >
+            {isVideoMuted ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                <span>Mute видео</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-[#33a4d4]" />
+                <span>Звук видео: Вкл</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* Upload custom video file button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs transition-colors shadow-lg active:scale-95"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] hover:bg-[#33a4d4]/15 text-[#b6c6da] hover:text-[#5fc1e8] border border-[#33a4d4]/20 hover:border-[#33a4d4]/50 text-xs transition-colors shadow-lg active:scale-95 cursor-pointer"
           title="Загрузить свой видеофайл (MP4) для точной проверки синхронизации"
         >
-          <Upload className="w-3.5 h-3.5 text-rose-400" />
-          <span className="hidden sm:inline">Своё видео</span>
+          <Upload className="w-3.5 h-3.5 text-[#33a4d4]" />
+          <span className="hidden sm:inline">{uploadedVideoUrl ? 'Заменить видео' : 'Своё видео'}</span>
+          <span className="sm:hidden">{uploadedVideoUrl ? 'Замена' : 'Видео'}</span>
         </button>
       </div>
 
@@ -431,10 +501,10 @@ export const VideoVisualizer: React.FC<VideoVisualizerProps> = ({
 
       {/* Drop zone indicator */}
       {isDragging && (
-        <div className="absolute inset-0 z-50 bg-rose-950/80 backdrop-blur-sm border-2 border-dashed border-rose-400 rounded-2xl flex flex-col items-center justify-center text-white">
-          <Upload className="w-12 h-12 text-rose-300 animate-bounce mb-2" />
-          <p className="text-base font-semibold">Отпустите видео сюда для синхронизации</p>
-          <p className="text-xs text-zinc-300 mt-1">Поддерживаются форматы MP4, MOV, WebM</p>
+        <div className="absolute inset-0 z-50 bg-[#030a14]/90 backdrop-blur-sm border-2 border-dashed border-[#33a4d4] rounded-2xl flex flex-col items-center justify-center text-white">
+          <Upload className="w-12 h-12 text-[#33a4d4] animate-bounce mb-2" />
+          <p className="text-base font-semibold text-[#eaf3ff]">Отпустите видео сюда для синхронизации</p>
+          <p className="text-xs text-[#7b8ea6] mt-1">Поддерживаются форматы MP4, MOV, WebM</p>
         </div>
       )}
     </div>
