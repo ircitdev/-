@@ -57,6 +57,111 @@ export function audioBufferToWav(buffer: AudioBuffer): Blob {
   return new Blob([view], { type: 'audio/wav' });
 }
 
+export interface NormalizedAudioResult {
+  normalizedUrl: string;
+  duration: number;
+  gainApplied: number;
+  initialPeakDb: number;
+  finalPeakDb: number;
+  blob: Blob;
+}
+
+/**
+ * Normalizes the volume level of an audio source (URL or Blob) to a target peak dBFS
+ * (e.g. -1.0 dBFS) so that all generated speech clips have consistent loudness.
+ */
+export async function normalizeAudioVolume(
+  audioSource: string | Blob,
+  targetPeakDb = -1.0
+): Promise<NormalizedAudioResult> {
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  const ctx = new AudioContextClass();
+
+  try {
+    let arrayBuffer: ArrayBuffer;
+    if (audioSource instanceof Blob) {
+      arrayBuffer = await audioSource.arrayBuffer();
+    } else {
+      const res = await fetch(audioSource);
+      arrayBuffer = await res.arrayBuffer();
+    }
+
+    const decoded = await ctx.decodeAudioData(arrayBuffer);
+    const numChannels = decoded.numberOfChannels;
+    const length = decoded.length;
+
+    // 1. Measure peak absolute amplitude across all channels
+    let globalMax = 0;
+    for (let c = 0; c < numChannels; c++) {
+      const data = decoded.getChannelData(c);
+      for (let i = 0; i < length; i++) {
+        const absVal = Math.abs(data[i]);
+        if (absVal > globalMax) {
+          globalMax = absVal;
+        }
+      }
+    }
+
+    const initialPeakDb = globalMax > 0.00001 ? 20 * Math.log10(globalMax) : -96;
+
+    // If completely silent, return as-is
+    if (globalMax < 0.0001) {
+      const wavBlob = audioBufferToWav(decoded);
+      return {
+        normalizedUrl: typeof audioSource === 'string' ? audioSource : URL.createObjectURL(wavBlob),
+        duration: decoded.duration,
+        gainApplied: 1.0,
+        initialPeakDb: -96,
+        finalPeakDb: -96,
+        blob: wavBlob,
+      };
+    }
+
+    // Target linear peak from targetPeakDb (e.g. -1.0 dBFS -> 10^(-1/20) ~ 0.891)
+    const targetPeak = Math.pow(10, targetPeakDb / 20);
+    // Calculate gain multiplier (with safety bounds 0.2 .. 5.0)
+    let gain = Math.min(5.0, Math.max(0.2, targetPeak / globalMax));
+
+    // 2. Apply normalization gain to all channels with soft-limiting
+    for (let c = 0; c < numChannels; c++) {
+      const data = decoded.getChannelData(c);
+      for (let i = 0; i < length; i++) {
+        let val = data[i] * gain;
+        // Soft-knee limiting for any rare overshoot
+        if (val > 0.98) {
+          val = 0.98 + 0.02 * Math.tanh((val - 0.98) / 0.02);
+        } else if (val < -0.98) {
+          val = -0.98 - 0.02 * Math.tanh((-val - 0.98) / 0.02);
+        }
+        data[i] = val;
+      }
+    }
+
+    const finalPeakDb = targetPeakDb;
+
+    // 3. Export to normalized WAV Blob and Data URL
+    const wavBlob = audioBufferToWav(decoded);
+    const normalizedUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(wavBlob);
+    });
+
+    return {
+      normalizedUrl,
+      duration: decoded.duration,
+      gainApplied: Number(gain.toFixed(2)),
+      initialPeakDb: Number(initialPeakDb.toFixed(1)),
+      finalPeakDb: Number(finalPeakDb.toFixed(1)),
+      blob: wavBlob,
+    };
+  } finally {
+    try {
+      ctx.close();
+    } catch (e) {}
+  }
+}
+
 // Format seconds into MM:SS.ms or SRT format
 export function formatTimeDisplay(seconds: number): string {
   const m = Math.floor(seconds / 60);

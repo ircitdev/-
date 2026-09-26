@@ -131,14 +131,69 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({
           ))}
         </div>
 
-        {/* Vertical Grid Lines */}
+        {/* Vertical Grid Lines (10s intervals) */}
         {timeTicks.map((tick) => (
           <div
             key={tick}
             style={{ left: `${(tick / duration) * 100}%` }}
-            className="absolute top-6 bottom-0 w-px bg-zinc-800/40 pointer-events-none"
+            className="absolute top-6 bottom-0 w-px bg-zinc-800/40 pointer-events-none z-0"
           />
         ))}
+
+        {/* 14 Scene Start Visual Markers (Vertical Lines & Ruler Notches) */}
+        {segments.map((seg) => {
+          const leftPct = (seg.startTime / duration) * 100;
+          const isActive = activeSegmentId === seg.id;
+
+          return (
+            <div
+              key={`scene-marker-${seg.id}`}
+              style={{ left: `${leftPct}%` }}
+              className="absolute top-0 bottom-0 pointer-events-none z-20 flex flex-col items-center"
+            >
+              {/* Top Ruler Scene Badge & Downward Indicator */}
+              <div
+                className={`absolute top-0 -translate-x-1/2 flex flex-col items-center transition-all duration-300 ${
+                  isActive ? 'scale-110' : 'opacity-70 group-hover:opacity-100'
+                }`}
+              >
+                {/* Scene number pill on the ruler */}
+                <div
+                  className={`px-1 py-[1px] rounded text-[8px] font-mono font-bold leading-none shadow-sm transition-colors ${
+                    isActive
+                      ? 'bg-rose-500 text-white ring-1 ring-white/60 shadow-[0_0_8px_rgba(244,63,94,0.7)]'
+                      : 'bg-zinc-800/90 text-zinc-400 border border-zinc-700/80 hover:text-zinc-200'
+                  }`}
+                  title={`Сцена #${seg.id}: ${seg.startTime}–${seg.endTime}с`}
+                >
+                  #{seg.id}
+                </div>
+                {/* Micro pointer chevron */}
+                <div
+                  className={`w-0 h-0 border-x-[3px] border-x-transparent border-t-[3px] ${
+                    isActive ? 'border-t-rose-400' : 'border-t-zinc-600'
+                  }`}
+                />
+              </div>
+
+              {/* Full-Height Vertical Boundary Marker Line */}
+              <div
+                className={`w-px h-full transition-all duration-300 ${
+                  isActive
+                    ? 'w-[2px] bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.7)] opacity-100'
+                    : 'bg-zinc-700/60 border-l border-dashed border-zinc-600/40 opacity-70'
+                }`}
+              />
+
+              {/* Bottom tick dot */}
+              <div
+                className={`absolute bottom-0 -translate-x-1/2 w-1 h-1 rounded-full ${
+                  isActive ? 'bg-rose-400' : 'bg-zinc-600'
+                }`}
+              />
+            </div>
+          );
+        })}
 
         {/* Phase Bands / Background Narrative Track */}
         <div className="absolute top-6 inset-x-0 h-4 flex opacity-40 text-[9px] font-medium text-zinc-400 pointer-events-none">

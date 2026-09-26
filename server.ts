@@ -133,6 +133,160 @@ app.post('/api/tts/generate', async (req: Request, res: Response): Promise<void>
   }
 });
 
+// Endpoint: Generate Detailed Cinematic Video Prompt using Gemini API
+app.post('/api/video-prompt/generate', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      sceneVisual,
+      cameraMovement,
+      emotionKey,
+      emotionDescription,
+      text,
+      category,
+      duration,
+      sceneTitle,
+    } = req.body;
+
+    if (!sceneVisual || typeof sceneVisual !== 'string') {
+      res.status(400).json({ error: 'sceneVisual is required' });
+      return;
+    }
+
+    const ai = getGenAIClient();
+    const systemPrompt = `You are an award-winning cinematic Director of Photography (DP) and AI video prompt engineer for high-end cinematic commercials, documentary portraits, and generative video tools (Runway Gen-3, Sora, Kling, Luma Dream Machine, Midjourney v6).
+Your task is to take a scene description from a 70-second emotional film celebrating a woman's transformative life journey (childhood, motherhood, rhythmic gymnastics/sport, overcoming severe injury, beauty pageants/triumph, confident present at 50) and generate a rich, professional, cinematic video prompt breakdown.
+
+Return ONLY a valid JSON object with the following fields:
+- cameraMovement: Detailed camera movement (focal length, lens, steadicam/dolly/crane, panning, speed, depth of field).
+- lighting: Lighting design, color temperature, time of day, atmosphere, shadows, volumetric rays, highlights.
+- style: Cinematic visual aesthetic, camera body, lens type, film stock (e.g. Arri Alexa LF, Panavision Anamorphic, 35mm Kodak 5219 grain, subtle color grade, photorealism).
+- composition: Framing, rule of thirds, subject placement, foreground/background depth, bokeh.
+- fullPrompt: A master cinematic description in Russian (2-3 evocative sentences).
+- fullPromptEn: An exact, professional, comma-separated English prompt optimized for AI video models (Runway Gen-3, Kling, Sora), including technical camera specs, lighting, movement, 8k, photorealistic, cinematic.`;
+
+    const userPrompt = `Scene details:
+- Scene title: "${sceneTitle || ''}"
+- Visual concept: "${sceneVisual}"
+- Current camera guidance: "${cameraMovement || 'Cinematic movement'}"
+- Scene phase / category: ${category || 'general'}
+- Emotional tone: "${emotionKey || ''}: ${emotionDescription || ''}"
+- Voiceover line: "${text || ''}"
+- Scene duration: ${duration || 5.0} seconds
+
+Generate a detailed, cinematic video generation prompt breakdown in JSON format.`;
+
+    const candidateTextModels = ['gemini-3.8-flash', 'gemini-3.8-flash-lite', 'gemini-2.5-flash'];
+    const modelErrors: Record<string, string> = {};
+    let data: any = null;
+
+    for (const model of candidateTextModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        });
+
+        console.log('Gemini model response candidates:', JSON.stringify(response.candidates));
+        console.log('Gemini response.text:', response.text);
+
+        const responseText = response.text || '';
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseErr: any) {
+          modelErrors[model] = `Keys: ${Object.keys(response).join(',')}; Full: ${JSON.stringify(response)}`;
+          continue;
+        }
+
+        if (data && data.cameraMovement) {
+          break;
+        }
+      } catch (err: any) {
+        modelErrors[model] = err?.message || String(err);
+        console.warn(`Text model ${model} failed:`, err?.message || err);
+      }
+    }
+
+    if (!data) {
+      console.warn('Gemini quota reached or model unavailable, using cinematic director fallback');
+      const fallback = generateServerPromptFallback(req.body);
+      res.json({
+        success: true,
+        prompt: fallback,
+        source: 'director_engine',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      prompt: data,
+      source: 'gemini',
+    });
+  } catch (err: any) {
+    console.warn('Error in prompt route, serving fallback prompt:', err?.message);
+    const fallback = generateServerPromptFallback(req.body);
+    res.json({
+      success: true,
+      prompt: fallback,
+      source: 'director_engine',
+    });
+  }
+});
+
+// Helper for fallback cinematic prompt generation
+function generateServerPromptFallback(body: any) {
+  const { sceneVisual = '', cameraMovement = '', emotionKey = '', category = 'general' } = body;
+
+  let lighting = 'Теплый рассеянный кинематографичный свет золотого часа (golden hour), мягкий контровой ореол волос, деликатные блики на оптике и естественные полутени.';
+  let style = '35mm анаморфотная кинооптика Panavision, камера Arri Alexa Mini LF, Kodak Vision3 500T, натуральное мелкое пленочное зерно, кинематографичный грейдинг.';
+  let composition = 'Крупный или средний кинематографичный план с акцентом на выразительные глаза и динамику движений, гармоничное разделение планов и кремовое боке на фоне.';
+  let camera = `${cameraMovement || 'Плавное кинематографичное движение'}. Плавный проезд стедикама с микро-дрейфом фокуса (shallow DOF f/1.8), подчеркивающий интимность и масштаб момента.`;
+
+  if (category === 'childhood') {
+    lighting = 'Мягкий ностальгический утренний свет сквозь легкие занавески, золотистые пылинки в воздухе, теплая палитра первых воспоминаний.';
+    style = 'Винтажный пленочный тон Kodak Portra 400, 50mm f/1.4, мягкий контраст, деликатное виньетирование, эмоциональный арт-хаусный реализм.';
+    composition = 'Нижний ракурс с точки зрения ребенка, акцент на детали и жесты, мягко размытое окружение.';
+  } else if (category === 'motherhood') {
+    lighting = 'Нежный рассеянный свет закатного солнца, персиковые и медовые тона кожи, легкий контровой ореол, уютная теплая гамма.';
+    style = 'Премиальная реклама Apple/Nike, 85mm f/1.8 Cine lens, естественная цветопередача, эмоциональная документальная эстетика.';
+    composition = 'Интимный двухплановый портрет (мать и дочь), диагональная композиция, живой эмоциональный контакт.';
+  } else if (category === 'sport') {
+    lighting = 'Холодный резкий свет софитов спортивной арены или катка, контрастные лучи сквозь морозный пар, искрящиеся микрочастицы льда.';
+    style = 'Спортивная кинематография Phantom Flex 4K, 120fps slow-motion, динамичная глубина резкости, гиперреалистичные текстуры.';
+    composition = 'Динамичный ракурс следования за движением тела, центрирование грациозного силуэта, стремительные линии перспективы.';
+  } else if (category === 'recovery') {
+    lighting = 'Глубокий приглушенный полумрак, узкий драматичный направленный луч надежды из окна, фактурные сине-серые тени.';
+    style = 'Драматический арт-синема, 35mm монохромно-приглушенная палитра, глубокий психологизм кадра.';
+    composition = 'Фронтальный минималистичный план, символичное пространство преодоления, акцент на волевой взгляд героини.';
+  } else if (category === 'triumph') {
+    lighting = 'Ослепительные вспышки сотен фотокамер, сияющие прожекторы подиума, мерцающие золотые отражения в пайетках вечернего платья.';
+    style = 'High-fashion editorial Vogue / Cannes Film Festival, 70mm IMAX формат, кристальная четкость, роскошный блеск и глубокие контрасты.';
+    composition = 'Величественный средний план снизу вверх, триумфальная поза победительницы, заполняющий кадр ореол огней.';
+  } else {
+    lighting = 'Благородный вечерний свет дизайнерских интерьеров, мягкое мерцание свечей, изысканный зеркальный отблеск и сияние уверенности.';
+    style = 'Кинокартина в духе Паоло Соррентино, Panavision Ultra Prime, глубокий бархатистый грейдинг, безупречная эстетика зрелой женской красоты.';
+    composition = 'Симметричный портрет перед зеркалом, многослойный взгляд в объектив, визуальное воплощение гармонии и внутренней силы.';
+  }
+
+  const fullPrompt = `${sceneVisual}. Камера: ${camera}. Освещение: ${lighting}. Стиль: ${style}. Настроение: ${emotionKey}.`;
+  const fullPromptEn = `Cinematic 8k video shot of ${sceneVisual}, ${category} phase, feeling ${emotionKey}. Camera movement: ${cameraMovement}, smooth cinematic gimbal, 35mm anamorphic lens, shallow depth of field f/1.8. Lighting: golden hour volumetric lighting with soft rim light. Film look: Arri Alexa Mini LF, Kodak Vision3 500T 35mm film grain, masterpiece cinematography, hyperrealistic, award-winning commercial aesthetic.`;
+
+  return {
+    cameraMovement: camera,
+    lighting,
+    style,
+    composition,
+    fullPrompt,
+    fullPromptEn,
+    generatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
 // Endpoint: Check TTS API availability & health
 app.get('/api/tts/status', (req: Request, res: Response) => {
   const hasKey = Boolean(process.env.GEMINI_API_KEY || process.env.API_KEY);

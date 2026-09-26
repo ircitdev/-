@@ -1,3 +1,13 @@
+export interface VideoPromptDetails {
+  cameraMovement: string;
+  lighting: string;
+  style: string;
+  composition: string;
+  fullPrompt: string;
+  fullPromptEn: string;
+  generatedAt?: string;
+}
+
 export interface VoiceSegment {
   id: number;
   startTime: number;
@@ -15,6 +25,8 @@ export interface VoiceSegment {
   audioDuration?: number;
   status: 'idle' | 'generating' | 'ready' | 'error';
   error?: string;
+  peaks?: number[];
+  videoPrompt?: VideoPromptDetails;
 }
 
 export interface AudioSettings {

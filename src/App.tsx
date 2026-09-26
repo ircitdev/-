@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { INITIAL_SEGMENTS } from './data/segments';
-import { VoiceSegment, AudioSettings } from './types';
+import { VoiceSegment, AudioSettings, VideoPromptDetails } from './types';
 import { Header } from './components/Header';
 import { VideoVisualizer } from './components/VideoVisualizer';
 import { TimelineRuler } from './components/TimelineRuler';
@@ -12,7 +12,9 @@ import {
   createCinematicBackingBuffer,
   playSoundFX,
   generateSRT,
+  normalizeAudioVolume,
 } from './utils/audioEngine';
+import { fitAudioToDuration } from './utils/timeStretch';
 import { Sparkles, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -21,6 +23,7 @@ export default function App() {
   const duration = 70.0;
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isGeneratingAll, setIsGeneratingAll] = useState<boolean>(false);
+  const [isSnappingAll, setIsSnappingAll] = useState<boolean>(false);
   const [playingClipId, setPlayingClipId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
@@ -237,7 +240,10 @@ export default function App() {
       const currentSeg = segments.find((s) => newTime >= s.startTime && newTime < s.endTime);
 
       if (currentSeg) {
-        if (currentSeg.audioUrl && currentSeg.audioUrl.startsWith('data:audio')) {
+        if (
+          currentSeg.audioUrl &&
+          (currentSeg.audioUrl.startsWith('data:audio') || currentSeg.audioUrl.startsWith('blob:'))
+        ) {
           let audio = activeVoiceAudiosRef.current.get(currentSeg.id);
           const segOffset = newTime - currentSeg.startTime;
 
@@ -320,19 +326,33 @@ export default function App() {
 
       const data = await res.json();
       if (data.audioUrl) {
+        // Step: Normalize audio volume level to -1.0 dBFS for consistent broadcast loudness
+        let finalAudioUrl = data.audioUrl;
+        let finalDuration = data.duration;
+        let normNote = '';
+
+        try {
+          const normResult = await normalizeAudioVolume(data.audioUrl, -1.0);
+          finalAudioUrl = normResult.normalizedUrl;
+          finalDuration = normResult.duration;
+          normNote = ` (громкость нормализована: ${normResult.gainApplied}x / -1.0 dBFS)`;
+        } catch (normErr) {
+          console.warn('Audio normalization step bypassed:', normErr);
+        }
+
         setSegments((prev) =>
           prev.map((s) =>
             s.id === id
               ? {
                   ...s,
                   status: 'ready',
-                  audioUrl: data.audioUrl,
-                  audioDuration: data.duration,
+                  audioUrl: finalAudioUrl,
+                  audioDuration: finalDuration,
                 }
               : s
           )
         );
-        showToast(`Сцена #${id} успешно озвучена!`);
+        showToast(`Сцена #${id} озвучена${normNote}!`);
       }
     } catch (err: any) {
       console.error('Error generating audio:', err);
@@ -391,7 +411,10 @@ export default function App() {
       stopBgMusic();
     }
 
-    if (segment.audioUrl && segment.audioUrl.startsWith('data:audio')) {
+    if (
+      segment.audioUrl &&
+      (segment.audioUrl.startsWith('data:audio') || segment.audioUrl.startsWith('blob:'))
+    ) {
       const audio = new Audio(segment.audioUrl);
       audio.volume = settings.voiceVolume;
       audio.onended = () => setPlayingClipId(null);
@@ -409,6 +432,64 @@ export default function App() {
     }
   };
 
+  // Update audio for a segment after Web Audio API tempo snapping / stretching
+  const handleUpdateSegmentAudio = useCallback(
+    (id: number, newAudioUrl: string, newDuration: number) => {
+      setSegments((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? {
+                ...s,
+                audioUrl: newAudioUrl,
+                audioDuration: newDuration,
+                status: 'ready',
+              }
+            : s
+        )
+      );
+      showToast(`Темп сцены #${id} привязан к таймингу (${newDuration.toFixed(1)} сек)`);
+    },
+    []
+  );
+
+  // Batch snap tempo across all ready scenes with audio
+  const handleSnapAllTempos = async () => {
+    if (isSnappingAll) return;
+    const eligible = segments.filter((s) => Boolean(s.audioUrl));
+    if (eligible.length === 0) {
+      showToast('Сначала сгенерируйте озвучку сцен');
+      return;
+    }
+
+    setIsSnappingAll(true);
+    showToast('Привязываем темп во всех сценах через Web Audio API...');
+
+    let updatedCount = 0;
+    for (const seg of eligible) {
+      try {
+        const res = await fitAudioToDuration(seg.audioUrl!, seg.duration, 'wsola');
+        setSegments((prev) =>
+          prev.map((s) =>
+            s.id === seg.id
+              ? {
+                  ...s,
+                  audioUrl: res.dataUrl,
+                  audioDuration: res.newDuration,
+                  status: 'ready',
+                }
+              : s
+          )
+        );
+        updatedCount++;
+      } catch (err) {
+        console.warn(`Failed to snap tempo for segment #${seg.id}:`, err);
+      }
+    }
+
+    setIsSnappingAll(false);
+    showToast(`Темп синхронизирован в ${updatedCount} сценах!`);
+  };
+
   // Update text for a segment
   const handleUpdateText = (id: number, newText: string) => {
     setSegments((prev) =>
@@ -416,6 +497,17 @@ export default function App() {
     );
     showToast(`Текст сцены #${id} обновлён. Нажмите «Озвучить» для записи.`);
   };
+
+  // Update video prompt for a segment generated by Gemini
+  const handleUpdateVideoPrompt = useCallback(
+    (id: number, prompt: VideoPromptDetails) => {
+      setSegments((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, videoPrompt: prompt } : s))
+      );
+      showToast(`Промпт для видео сцены #${id} создан через Gemini!`);
+    },
+    []
+  );
 
   // Download Single Clip WAV
   const downloadSingleClip = (segment: VoiceSegment) => {
@@ -457,7 +549,10 @@ export default function App() {
 
     // 2. Decode and place each voice segment at its exact start second
     for (const seg of segments) {
-      if (seg.audioUrl && seg.audioUrl.startsWith('data:audio')) {
+      if (
+        seg.audioUrl &&
+        (seg.audioUrl.startsWith('data:audio') || seg.audioUrl.startsWith('blob:'))
+      ) {
         try {
           const res = await fetch(seg.audioUrl);
           const arrayBuffer = await res.arrayBuffer();
@@ -530,6 +625,8 @@ export default function App() {
         onExportSRT={exportSRT}
         onOpenScriptModal={() => setIsExportModalOpen(true)}
         readyCount={readyCount}
+        onSnapAllTempos={handleSnapAllTempos}
+        isSnappingAll={isSnappingAll}
       />
 
       {/* Main Studio Body */}
@@ -637,6 +734,10 @@ export default function App() {
                 isPlayingClip={playingClipId === segment.id}
                 onUpdateText={handleUpdateText}
                 onDownloadClip={downloadSingleClip}
+                onUpdateSegmentAudio={handleUpdateSegmentAudio}
+                onUpdateVideoPrompt={handleUpdateVideoPrompt}
+                masterCurrentTime={currentTime}
+                isMasterPlaying={isPlaying}
               />
             ))}
           </div>

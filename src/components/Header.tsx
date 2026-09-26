@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Download, FileText, Wand2, Volume2, RefreshCw } from 'lucide-react';
+import { Sparkles, Download, FileText, Wand2, Volume2, RefreshCw, Sliders } from 'lucide-react';
 import { VoiceSegment } from '../types';
 
 interface HeaderProps {
@@ -10,6 +10,8 @@ interface HeaderProps {
   onExportSRT: () => void;
   onOpenScriptModal: () => void;
   readyCount: number;
+  onSnapAllTempos?: () => void;
+  isSnappingAll?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({
   onExportSRT,
   onOpenScriptModal,
   readyCount,
+  onSnapAllTempos,
+  isSnappingAll = false,
 }) => {
   const totalCount = segments.length;
   const isAllReady = readyCount === totalCount;
@@ -80,6 +84,32 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </button>
+
+          {/* Fit all tempos with Web Audio API WSOLA */}
+          {readyCount > 0 && onSnapAllTempos && (
+            <button
+              onClick={onSnapAllTempos}
+              disabled={isSnappingAll || isGeneratingAll}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs md:text-sm font-medium transition-all shadow-sm active:scale-95 ${
+                isSnappingAll
+                  ? 'bg-amber-950/80 text-amber-300 border border-amber-500/50'
+                  : 'bg-zinc-900 hover:bg-amber-950/40 text-amber-300 hover:text-amber-200 border border-amber-500/40'
+              }`}
+              title="Автоматически подогнать темп во всех озвученных сценах под их хронометраж через Web Audio API"
+            >
+              {isSnappingAll ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                  <span>Подгонка темпа...</span>
+                </>
+              ) : (
+                <>
+                  <Sliders className="w-4 h-4 text-amber-400" />
+                  <span>Привязать темп ({readyCount})</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Download Master WAV */}
           <button
